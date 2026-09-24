@@ -1,0 +1,5 @@
+venv/
+dataset/
+raw_dataset/
+__pycache__/
+.streamlit/

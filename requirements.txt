@@ -3,3 +3,4 @@ fpdf2
 streamlit
 pillow
 numpy
+google-genai
