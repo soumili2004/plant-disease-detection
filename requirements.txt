@@ -4,4 +4,5 @@ streamlit
 pillow
 numpy
 google-genai
-gTTS
+gtts
+requests

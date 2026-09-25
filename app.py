@@ -1,5 +1,7 @@
+import os
 import io
 import re
+import requests
 import streamlit as st
 from PIL import Image
 from gtts import gTTS
@@ -70,11 +72,53 @@ st.markdown("""
 st.markdown("""
     <div class="header-card">
         <div class="header-title">🌿 AgriGuard AI</div>
-        <div class="header-subtitle">Instant Leaf Disease Detection & English Voice Remedies</div>
+        <div class="header-subtitle">Instant Leaf Disease Detection, Weather Risk Forecasting & English Voice Remedies</div>
     </div>
 """, unsafe_allow_html=True)
 
-# 4. Sidebar Information
+# 4. Weather & Fungal Risk Forecasting Logic
+def get_weather_data(city_name: str, api_key: str):
+    """Fetches real-time temperature, humidity, and weather conditions from OpenWeatherMap API."""
+    if not api_key:
+        return None
+    url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={api_key}&units=metric"
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "city": data["name"],
+                "country": data["sys"]["country"],
+                "temp": data["main"]["temp"],
+                "humidity": data["main"]["humidity"],
+                "weather": data["weather"][0]["description"].title(),
+            }
+        return None
+    except Exception:
+        return None
+
+def calculate_fungal_risk(humidity: float, temp: float):
+    """Evaluates fungal spore proliferation risk based on atmospheric humidity and temperature."""
+    if humidity >= 80 and 15 <= temp <= 28:
+        return {
+            "level": "CRITICAL RISK",
+            "color": "error",
+            "message": "⚠️ High humidity and optimal temperature detected! Favorable conditions for Late Blight, Downy Mildew, and Rust spore germination."
+        }
+    elif humidity >= 65 or (12 <= temp <= 30):
+        return {
+            "level": "MODERATE RISK",
+            "color": "warning",
+            "message": "⚡ Moderate humidity detected. Inspect plant lower leaves regularly and maintain adequate spacing."
+        }
+    else:
+        return {
+            "level": "LOW RISK",
+            "color": "success",
+            "message": "🟢 Low risk for rapid fungal spore proliferation under current local weather conditions."
+        }
+
+# 5. Sidebar Information & Weather Widget
 with st.sidebar:
     st.markdown("## 🌿 **AgriGuard Controls**")
     st.caption("AI-Powered Botanical Health Engine")
@@ -83,13 +127,48 @@ with st.sidebar:
         
         Identifies 38 plant conditions across crops like Tomato, Potato, Apple, and Pepper, with dynamic fallback for unknown species.
     """)
-    st.caption("🚀 Version 2.7 | Disease-Specific Voice Diagnostics")
+    
+    st.markdown("---")
+    st.markdown("### 🌤️ **Farm Weather Risk Engine**")
 
-# 5. Full Specialized Database for Plant Conditions
+    # Retrieve OpenWeather API key from Streamlit secrets or environment
+    weather_api_key = None
+    try:
+        weather_api_key = st.secrets.get("OPENWEATHER_API_KEY")
+    except Exception:
+        weather_api_key = os.getenv("OPENWEATHER_API_KEY")
+
+    user_city = st.text_input("Enter Farm Location / City", value="Kolkata")
+
+    if user_city:
+        weather = get_weather_data(user_city, weather_api_key)
+        if weather:
+            st.write(f"**Location:** {weather['city']}, {weather['country']}")
+            
+            w_col1, w_col2 = st.columns(2)
+            with w_col1:
+                st.metric("Temperature", f"{weather['temp']}°C")
+            with w_col2:
+                st.metric("Humidity", f"{weather['humidity']}%")
+                
+            risk = calculate_fungal_risk(weather['humidity'], weather['temp'])
+            
+            if risk['color'] == "error":
+                st.error(f"**{risk['level']}**\n\n{risk['message']}")
+            elif risk['color'] == "warning":
+                st.warning(f"**{risk['level']}**\n\n{risk['message']}")
+            else:
+                st.success(f"**{risk['level']}**\n\n{risk['message']}")
+        else:
+            st.caption("Enter a valid city or add OPENWEATHER_API_KEY to secrets.toml.")
+
+    st.markdown("---")
+    st.caption("🚀 Version 3.0 | Proactive Weather & Voice Diagnostics")
+
+# 6. Database of Remedies for PlantVillage Classes
 REMEDIES = {
-    # Apple
     "apple_apple_scab": {
-        "organic": "Apply neem oil, sulfur spray, or liquid copper. Prune affected branches and rake fallen leaves to stop spore germination.",
+        "organic": "Apply neem oil, sulfur spray, or liquid copper. Prune affected branches and rake fallen leaves.",
         "chemical": "Spray fungicides containing captan, myclobutanil, or mancozeb at green-tip stage."
     },
     "apple_black_rot": {
@@ -100,12 +179,10 @@ REMEDIES = {
         "organic": "Remove nearby cedar galls. Spray copper or sulfur fungicide during early spring growth.",
         "chemical": "Spray myclobutanil or propiconazole at pink-bud stage."
     },
-    # Cherry
     "cherry_powdery_mildew": {
-        "organic": "Spray potassium bicarbonate, neem oil, or sulfur. Improve air circulation around the canopy.",
+        "organic": "Spray potassium bicarbonate, neem oil, or sulfur. Improve air circulation around canopy.",
         "chemical": "Apply myclobutanil, quinoxyfen, or tebuconazole fungicides."
     },
-    # Corn
     "corn_cercospora_leaf_spot_gray_leaf_spot": {
         "organic": "Rotate crops with non-grass species. Apply bio-fungicides containing Bacillus subtilis.",
         "chemical": "Spray azoxystrobin, pyraclostrobin, or propiconazole at first sign of lesions."
@@ -118,7 +195,6 @@ REMEDIES = {
         "organic": "Incorporate crop residues into soil post-harvest. Use copper-based bio-pesticides.",
         "chemical": "Apply azoxystrobin or propiconazole at tasseling stage."
     },
-    # Grape
     "grape_black_rot": {
         "organic": "Prune vines to increase sunlight exposure. Remove mummified grapes and destroy infected shoots.",
         "chemical": "Spray mancozeb, captan, or ziram during early bloom."
@@ -131,17 +207,14 @@ REMEDIES = {
         "organic": "Spray copper hydroxide or sulfur spray. Remove infected lower leaves.",
         "chemical": "Apply mancozeb or copper-based broad spectrum fungicides."
     },
-    # Peach
     "peach_bacterial_spot": {
         "organic": "Spray copper fungicides early during dormancy. Avoid excessive nitrogen fertilization.",
         "chemical": "Apply oxytetracycline or copper hydroxide sprays."
     },
-    # Pepper
     "pepper_bell_bacterial_spot": {
         "organic": "Spray copper octanoate or copper soap. Avoid handling plants when foliage is wet.",
         "chemical": "Apply copper hydroxide mixed with mancozeb for enhanced control."
     },
-    # Potato
     "potato_early_blight": {
         "organic": "Mulch base to avoid soil splash. Apply copper fungicide or Bacillus subtilis.",
         "chemical": "Apply chlorothalonil, mancozeb, or azoxystrobin."
@@ -150,12 +223,10 @@ REMEDIES = {
         "organic": "Destroy infected foliage immediately. Spray fixed copper defensively.",
         "chemical": "Apply systemic fungicides containing cymoxanil, fluazinam, or chlorothalonil."
     },
-    # Strawberry
     "strawberry_leaf_scorch": {
         "organic": "Remove old infected leaves post-harvest. Spray neem oil or copper sulfate.",
         "chemical": "Apply captan, thiophanate-methyl, or myclobutanil."
     },
-    # Tomato
     "tomato_bacterial_spot": {
         "organic": "Apply copper-based sprays mixed with neem oil. Practice strict 3-year crop rotation.",
         "chemical": "Apply copper hydroxide combined with mancozeb."
@@ -177,7 +248,7 @@ REMEDIES = {
         "chemical": "Apply chlorothalonil or mancozeb at first sign of leaf spots."
     },
     "tomato_spider_mites_two_spotted_spider_mite": {
-        "organic": "Spray insecticidal soap, neem oil, or introduce predatory mites (Phytoseiulus).",
+        "organic": "Spray insecticidal soap, neem oil, or introduce predatory mites.",
         "chemical": "Apply abamectin, bifenazate, or spiromesifen miticides."
     },
     "tomato_target_spot": {
@@ -196,23 +267,19 @@ REMEDIES = {
 
 def get_remedy(class_name):
     """Fuzzy key search to ensure specific remedies match any variation of class names."""
-    # Standardize string for lookup: tomato___early_blight -> tomato_early_blight
     clean_key = re.sub(r'[^a-zA-Z0-9]', '_', class_name).lower()
     clean_key = re.sub(r'_+', '_', clean_key).strip('_')
 
-    # 1. Exact or Partial Dictionary Match
     for key, remedy in REMEDIES.items():
         if key in clean_key or clean_key in key:
             return remedy
 
-    # 2. Healthy Condition Match
     if "healthy" in clean_key:
         return {
             "organic": "No treatment required. Maintain regular watering, adequate sunlight, and soil aeration.",
             "chemical": "No chemical intervention needed."
         }
 
-    # 3. Categorical Fallbacks (Specific to disease types)
     if "bacterial" in clean_key:
         return {
             "organic": "Apply copper soap spray. Avoid overhead watering to prevent bacterial spread.",
@@ -234,7 +301,7 @@ def get_remedy(class_name):
             "chemical": "Apply a general-purpose agricultural fungicide suitable for your crop."
         }
 
-# 6. Helper Functions for Audio Processing
+# 7. Helper Functions for Audio Processing
 def clean_text_for_speech(text: str) -> str:
     """Removes Markdown symbols and extra formatting for clean English TTS synthesis."""
     text = re.sub(r'[\*#_~`]', '', text)
@@ -251,7 +318,7 @@ def create_audio_bytes(text: str) -> io.BytesIO:
     audio_fp.seek(0)
     return audio_fp
 
-# 7. Load Predictor Engine
+# 8. Load Predictor Engine
 @st.cache_resource
 def load_predictor():
     return PlantDiseasePredictor()
@@ -263,7 +330,7 @@ except Exception as e:
     model_loaded = False
     st.error("❌ Predictor load error. Ensure model and class files exist.")
 
-# 8. Upload and Main Interface
+# 9. Upload and Main Interface
 st.subheader("🔍 Upload Leaf Sample")
 uploaded_file = st.file_uploader("Drop a clear leaf image below (PNG, JPG, JPEG)", type=["jpg", "jpeg", "png"])
 
@@ -309,12 +376,10 @@ if uploaded_file is not None and model_loaded:
                     st.balloons()
                     st.success("🟢 **Optimal Plant Health Detected!**")
 
-                # Retrieve specific remedy dynamically
                 treatment = get_remedy(disease_name)
                 organic_text = treatment["organic"]
                 chemical_text = treatment["chemical"]
 
-                # Render UI Tabs
                 tab1, tab2 = st.tabs(["🌱 Organic / Bio Remedies", "🧪 Chemical Control"])
                 with tab1:
                     st.info(organic_text)
@@ -323,7 +388,7 @@ if uploaded_file is not None and model_loaded:
 
                 class_name = disease_name
 
-            # 9. English Voice Output Generation
+            # 10. English Voice Output Generation
             st.markdown("---")
             st.markdown("### 🔊 Voice Remedies (English)")
             
@@ -335,7 +400,7 @@ if uploaded_file is not None and model_loaded:
 
             st.markdown("---")
             
-            # 10. Generate PDF Report
+            # 11. Generate PDF Report
             pdf_bytes = generate_pdf_report(
                 disease_name=class_name,
                 confidence=confidence,
